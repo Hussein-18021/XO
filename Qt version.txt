@@ -1,0 +1,214 @@
+#include <QApplication>
+#include <QWidget>
+#include <QPushButton>
+#include <QGridLayout>
+#include <QMessageBox>
+#include <vector>
+#include <iostream>
+
+// Constants for board size
+const int BOARD_SIZE = 3;
+
+// Function prototypes
+bool isBoardFull(const std::vector<std::vector<char>>& board);
+char checkWinner(const std::vector<std::vector<char>>& board);
+void findBestMove(std::vector<std::vector<char>>& board);
+int evaluateBoard(const std::vector<std::vector<char>>& board);
+void handlePlayerMove(std::vector<std::vector<char>>& board, char currentPlayer);
+void twoPlayersMode();
+void playerVsAIMode();
+
+// Widget class for Tic-Tac-Toe game
+class TicTacToeWidget : public QWidget {
+    Q_OBJECT
+
+public:
+    TicTacToeWidget(QWidget *parent = nullptr) : QWidget(parent) {
+        // Create the game board buttons
+        for (int i = 0; i < BOARD_SIZE; ++i) {
+            for (int j = 0; j < BOARD_SIZE; ++j) {
+                buttons[i][j] = new QPushButton("");
+                buttons[i][j]->setFixedSize(100, 100);
+                buttons[i][j]->setFont(QFont("Arial", 36));
+                gridLayout.addWidget(buttons[i][j], i, j);
+                connect(buttons[i][j], &QPushButton::clicked, [this, i, j]() { buttonClicked(i, j); });
+            }
+        }
+        setLayout(&gridLayout);
+
+        currentPlayer = 'X';
+        gameMode = TwoPlayers;
+    }
+
+private slots:
+    void buttonClicked(int row, int col) {
+        if (buttons[row][col]->text() == "") {
+            buttons[row][col]->setText(QString(currentPlayer));
+
+            // Update the game board
+            board[row][col] = currentPlayer;
+
+            // Check for winner or draw
+            char winner = checkWinner(board);
+            if (winner == 'X') {
+                QMessageBox::information(this, "Game Over", "Player 1 wins!");
+                resetGame();
+            } else if (winner == 'O') {
+                QMessageBox::information(this, "Game Over", "Player 2 wins!");
+                resetGame();
+            } else if (isBoardFull(board)) {
+                QMessageBox::information(this, "Game Over", "It's a tie!");
+                resetGame();
+            } else {
+                // Switch players
+                currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
+
+                // If in AI mode, let AI make a move
+                if (gameMode == PlayerVsAI && currentPlayer == 'X') {
+                    findBestMove(board);
+                    updateButtons();
+                    char winner = checkWinner(board);
+                    if (winner == 'X') {
+                        QMessageBox::information(this, "Game Over", "AI wins!");
+                        resetGame();
+                    } else if (isBoardFull(board)) {
+                        QMessageBox::information(this, "Game Over", "It's a tie!");
+                        resetGame();
+                    }
+                }
+            }
+        }
+    }
+
+private:
+    QPushButton *buttons[BOARD_SIZE][BOARD_SIZE];
+    QGridLayout gridLayout;
+    std::vector<std::vector<char>> board = std::vector<std::vector<char>>(BOARD_SIZE, std::vector<char>(BOARD_SIZE, ' '));
+    char currentPlayer;
+    enum GameMode { TwoPlayers, PlayerVsAI };
+    GameMode gameMode;
+
+    bool isBoardFull(const std::vector<std::vector<char>>& board) {
+        for (int i = 0; i < BOARD_SIZE; ++i) {
+            for (int j = 0; j < BOARD_SIZE; ++j) {
+                if (board[i][j] == ' ')
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    char checkWinner(const std::vector<std::vector<char>>& board) {
+        // Check rows, columns, and diagonals for wins
+        for (int i = 0; i < BOARD_SIZE; ++i) {
+            // Check rows
+            if (board[i][0] == board[i][1] && board[i][1] == board[i][2] && board[i][0] != ' ')
+                return board[i][0];
+
+            // Check columns
+            if (board[0][i] == board[1][i] && board[1][i] == board[2][i] && board[0][i] != ' ')
+                return board[0][i];
+        }
+
+        // Check diagonals
+        if (board[0][0] == board[1][1] && board[1][1] == board[2][2] && board[0][0] != ' ')
+            return board[0][0];
+
+        if (board[0][2] == board[1][1] && board[1][1] == board[2][0] && board[0][2] != ' ')
+            return board[0][2];
+
+        // No winner
+        return ' ';
+    }
+
+    void findBestMove(std::vector<std::vector<char>>& board) {
+        int bestScore = -1000;
+        int bestRow = -1;
+        int bestCol = -1;
+
+        for (int i = 0; i < BOARD_SIZE; ++i) {
+            for (int j = 0; j < BOARD_SIZE; ++j) {
+                if (board[i][j] == ' ') {
+                    board[i][j] = 'X';
+                    int score = minimax(board, MAX_DEPTH, -1000, 1000, false); // Depth limit: MAX_DEPTH, Added alpha-beta pruning parameters
+                    board[i][j] = ' ';
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestRow = i;
+                        bestCol = j;
+                    }
+                }
+            }
+        }
+
+        board[bestRow][bestCol] = 'X'; // Make the best move
+    }
+
+    int minimax(std::vector<std::vector<char>>& board, int depth, int alpha, int beta, bool isMaximizingPlayer) {
+        if (depth == 0 || checkWinner(board) != ' ') {
+            return evaluateBoard(board);
+        }
+
+        if (isMaximizingPlayer) {
+            int maxScore = -1000;
+            for (int i = 0; i < BOARD_SIZE; ++i) {
+                for (int j = 0; j < BOARD_SIZE; ++j) {
+                    if (board[i][j] == ' ') {
+                        board[i][j] = 'X';
+                        int score = minimax(board, depth - 1, alpha, beta, false);
+                        board[i][j] = ' ';
+                        maxScore = std::max(maxScore, score);
+                        alpha = std::max(alpha, score);
+                        if (beta <= alpha)
+                            break;
+                    }
+                }
+            }
+            return maxScore;
+        } else {
+            int minScore = 1000;
+            for (int i = 0; i < BOARD_SIZE; ++i) {
+                for (int j = 0; j < BOARD_SIZE; ++j) {
+                    if (board[i][j] == ' ') {
+                        board[i][j] = 'O';
+                        int score = minimax(board, depth - 1, alpha, beta, true);
+                        board[i][j] = ' ';
+                        minScore = std::min(minScore, score);
+                        beta = std::min(beta, score);
+                        if (beta <= alpha)
+                            break;
+                    }
+                }
+            }
+            return minScore;
+        }
+    }
+
+    int evaluateBoard(const std::vector<std::vector<char>>& board) {
+        // Implementation of the evaluateBoard function
+        // This function should be the same as in your original code
+    }
+
+    void resetGame() {
+        for (int i = 0; i < BOARD_SIZE; ++i) {
+            for (int j = 0; j < BOARD_SIZE; ++j) {
+                buttons[i][j]->setText("");
+                board[i][j] = ' ';
+            }
+        }
+        currentPlayer = 'X';
+    }
+};
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+
+    TicTacToeWidget widget;
+    widget.setWindowTitle("Tic Tac Toe");
+    widget.show();
+
+    return app.exec();
+}
+
+#include "main.moc" // Required when using Qt with custom slots
